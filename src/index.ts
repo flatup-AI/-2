@@ -131,7 +131,7 @@ function readConfig(env = process.env): AppConfig {
     slackUseSocketMode,
     slackPublicChannelId: env.SLACK_PUBLIC_CHANNEL_ID || '',
     slackAdminUserIds: (env.SLACK_ADMIN_USER_IDS || '').split(',').map((v) => v.trim()).filter(Boolean),
-    port: Number(env.PORT || 3000),
+    port: Number(env.PORT || 3001),
     timezone: env.TZ || 'Asia/Tokyo',
   };
 }
