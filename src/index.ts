@@ -590,7 +590,7 @@ async function main() {
   await app.start(config.port);
   console.log(`⚡️ Flatup Slack Home app is running on port ${config.port}`);
 }
-const port = Number(process.env.PORT || 10000);
+const port = Number(process.env.PORT || 10001);
 
 const healthServer = http.createServer((req, res) => {
   res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
