@@ -1,4 +1,5 @@
-import { App, LogLevel, type Block, type KnownBlock } from '@slack/bolt';
+import bolt from '@slack/bolt';
+import type { Block, KnownBlock } from '@slack/types';
 import cron from 'node-cron';
 import process from 'node:process';
 
@@ -376,6 +377,8 @@ function buildEveningModal() {
     ]),
   };
 }
+
+const { App, LogLevel } = bolt;
 
 async function main() {
   const config = readConfig();
