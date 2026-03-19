@@ -1,1 +1,14 @@
-
+{
+  "name": "flatup-slack-home",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --loader tsx src/index.ts"
+  },
+  "dependencies": {
+    "@slack/bolt": "^3.22.0",
+    "node-cron": "^4.2.1",
+    "tsx": "^4.20.6"
+  }
+}
