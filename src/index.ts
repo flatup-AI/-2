@@ -592,14 +592,18 @@ async function main() {
     }
   });
 
-  app.action('refresh_home', async ({ ack, body, logger }) => {
-    await ack();
-    try {
-      await publishHome(body.user.id);
-    } catch (error) {
-      logger.error(error);
-    }
-  });
+app.action('open_end_of_day_modal', async ({ ack, body, client, logger }) => {
+  await ack();
+  try {
+    console.log('終礼ボタンが押されました');
+    await client.views.open({
+      trigger_id: body.trigger_id,
+      view: buildEveningModal(),
+    });
+  } catch (error) {
+    logger.error(error);
+  }
+});
 
   app.action('open_morning_modal', async ({ ack, body, client, logger }) => {
     await ack();
