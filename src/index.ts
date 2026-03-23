@@ -72,12 +72,48 @@ const actionGuidelines = [
   '常に新しい可能性に挑戦する',
 ] as const;
 
-const fortunes: Fortune[] = [
-  { title: '大吉', text: '今日は一歩先の気配りが信頼につながる日です。先手の行動が大きな成果を呼びます。' },
-  { title: '中吉', text: '焦らず丁寧に進めることで、周囲との連携が噛み合う一日になりそうです。' },
-  { title: '小吉', text: '小さな改善が大きな成果のきっかけになります。整理整頓が運気アップの鍵です。' },
-  { title: '吉', text: '報連相を意識すると、仕事がスムーズに進みます。早めの共有が幸運のポイントです。' },
-  { title: '末吉', text: '無理をせず基本を丁寧に積み重ねることが、今日の好結果につながります。' },
+const fortune = pickFortune(mood);
+  // 大吉（5）
+  { title: '大吉', text: '今日は全てが噛み合う最高の日。迷ったら前に出る選択が吉です。' },
+  { title: '大吉', text: '人との関わりが大きな成果を生みます。積極的に声をかけましょう。' },
+  { title: '大吉', text: '挑戦がそのまま結果につながる日。いつもより一歩踏み込みましょう。' },
+  { title: '大吉', text: '運も実力も味方する一日。スピード重視で動くと成果倍増です。' },
+  { title: '大吉', text: '周囲からの信頼が高まる日。率先して動くことで評価が上がります。' },
+
+  // 中吉（5）
+  { title: '中吉', text: '落ち着いた判断が良い結果を呼びます。丁寧さを意識しましょう。' },
+  { title: '中吉', text: '周囲との連携が鍵。報連相をしっかり行うと流れが良くなります。' },
+  { title: '中吉', text: '一つ一つ積み上げることで確実に前進できます。焦らずいきましょう。' },
+  { title: '中吉', text: '小さな工夫が成果につながります。改善意識を持つと吉。' },
+  { title: '中吉', text: 'いつも通りが一番強い日。基本を大切にすることで安定します。' },
+
+  // 小吉（5）
+  { title: '小吉', text: '無理せず自分のペースを守ることで良い流れになります。' },
+  { title: '小吉', text: '周囲に頼ることでスムーズに進みます。一人で抱え込まないこと。' },
+  { title: '小吉', text: 'コツコツ型がハマる日。積み重ねが後で効いてきます。' },
+  { title: '小吉', text: '少しの工夫で状況が改善します。柔軟に考えましょう。' },
+  { title: '小吉', text: '焦らず準備を整えることで、次のチャンスを掴めます。' },
+
+  // 吉（5）
+  { title: '吉', text: '安定した一日。普段通りを丁寧にこなすことが大切です。' },
+  { title: '吉', text: '人との会話にヒントあり。何気ない会話を大事にしましょう。' },
+  { title: '吉', text: '少しの意識で流れが良くなります。前向きな姿勢がカギです。' },
+  { title: '吉', text: '周囲をよく見ることでミスを防げます。確認を大切に。' },
+  { title: '吉', text: '無理せず自然体で。自分らしく動くことで結果が出ます。' },
+
+  // 凶（5）
+  { title: '凶', text: '思い通りにいかない場面も。冷静さを保つことが大切です。' },
+  { title: '凶', text: '焦りは禁物。落ち着いて一つずつ対処しましょう。' },
+  { title: '凶', text: '確認不足に注意。ダブルチェックを徹底しましょう。' },
+  { title: '凶', text: '周囲とのズレが出やすい日。意識的にコミュニケーションを。' },
+  { title: '凶', text: '無理をすると崩れます。今日は守りの姿勢が吉です。' },
+
+  // 大凶（5）
+  { title: '大凶', text: '今日は無理せず守りに徹する日。ミス防止を最優先に。' },
+  { title: '大凶', text: '普段以上に慎重さが求められます。確認・確認を徹底。' },
+  { title: '大凶', text: 'トラブルの芽を早めに摘むことが重要。違和感はすぐ対応。' },
+  { title: '大凶', text: '今日は耐える日。焦らず次につながる行動を意識しましょう。' },
+  { title: '大凶', text: '一度立ち止まることで流れが変わります。無理に進まないこと。' },
 ];
 
 const goodEveningMessages = [
@@ -199,14 +235,45 @@ function pickFortune(): Fortune {
   return fortunes[Math.floor(Math.random() * fortunes.length)];
 }
 
-function pickReward(score: number): string {
-  if (score >= 5) return goodEveningMessages[Math.floor(Math.random() * goodEveningMessages.length)];
-  if (score === 4) return 'いい仕事でした！あと一歩の積み重ねが、さらに大きな成果になります。';
-  if (score === 3) return 'まずまずの一日でした。振り返りを活かして明日はさらに良くしていきましょう。';
-  if (score === 2) return '今日は伸びしろのある一日でした。明日は一つでも前進できれば十分です。';
-  return '今日はしっかり休んで、明日またリスタートしましょう。';
-}
+function pickFortune(mood: number): Fortune {
+  // グループ分け
+  const daikichi = fortunes.filter(f => f.title === '大吉');
+  const chukichi = fortunes.filter(f => f.title === '中吉');
+  const shokichi = fortunes.filter(f => f.title === '小吉');
+  const kichi = fortunes.filter(f => f.title === '吉');
+  const kyo = fortunes.filter(f => f.title === '凶');
+  const daikyo = fortunes.filter(f => f.title === '大凶');
 
+  let pool: Fortune[] = [];
+
+  if (mood <= 2) {
+    // 気分低い → 超優遇（励ます）
+    pool = [
+      ...daikichi, ...daikichi, ...daikichi,
+      ...chukichi, ...chukichi,
+      ...shokichi,
+    ];
+  } else if (mood === 3) {
+    // 普通 → バランス
+    pool = [
+      ...daikichi,
+      ...chukichi, ...chukichi,
+      ...shokichi, ...shokichi,
+      ...kichi,
+    ];
+  } else {
+    // 気分良い → 現実寄り
+    pool = [
+      ...daikichi,
+      ...chukichi,
+      ...shokichi, ...shokichi,
+      ...kichi, ...kichi,
+      ...kyo,
+    ];
+  }
+
+  return pool[Math.floor(Math.random() * pool.length)];
+}
 function resolveMember(slackUserId: string, adminUserIds: Set<string>, slackRealName?: string): Member {
   const cached = slackUserMap.get(slackUserId);
   if (cached) return cached;
