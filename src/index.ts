@@ -117,12 +117,12 @@ const aiCommentByGuideline: Record<string, string> = {
 };
 
 const fixedMembers: Member[] = [
-  { id: 'staff-1', name: '上平 幸男', role: '管理者', department: '代表' },
-  { id: 'staff-2', name: '丸山 裕輔', role: 'メンバー', department: 'スタッフ' },
-  { id: 'staff-3', name: '前川 梨花', role: 'メンバー', department: 'スタッフ' },
-  { id: 'staff-4', name: '阿部 江美', role: 'メンバー', department: 'スタッフ' },
-  { id: 'staff-5', name: '青木 美里', role: 'メンバー', department: 'スタッフ' },
-  { id: 'staff-6', name: '中島 さくら', role: 'メンバー', department: 'スタッフ' },
+  { id: 'staff-1', name: '上平幸男', role: '管理者', department: '代表' },
+  { id: 'staff-2', name: '丸山裕輔', role: 'メンバー', department: '商環境事業部' },
+  { id: 'staff-3', name: '前川梨花', role: 'メンバー', department: '設計' },
+  { id: 'staff-4', name: '阿部江美', role: 'メンバー', department: '設計' },
+  { id: 'staff-5', name: '青木美里', role: 'メンバー', department: '事務・総務' },
+  { id: 'staff-6', name: '中島さくら', role: 'メンバー', department: '不動産事業部' },
 ];
 
 const slackUserMap = new Map<string, Member>();
