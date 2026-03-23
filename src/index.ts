@@ -225,10 +225,6 @@ function makeKey(userId: string, date: string): string {
   return `${userId}__${date}`;
 }
 
-function pickFortune(): Fortune {
-  return fortunes[Math.floor(Math.random() * fortunes.length)];
-}
-
 function pickFortune(mood: number): Fortune {
   const daikichi = fortunes.filter((f) => f.title === '大吉');
   const chukichi = fortunes.filter((f) => f.title === '中吉');
