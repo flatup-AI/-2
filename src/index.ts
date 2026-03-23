@@ -538,7 +538,7 @@ async function main() {
         userId: body.user.id,
         userName: member.name,
         department: member.department,
-        date: getCurrentDate(config.timezone)
+        date: getCurrentDate(config.timezone),
         mood,
         condition,
         work,
@@ -577,7 +577,7 @@ async function main() {
         userId: body.user.id,
         userName: member.name,
         department: member.department,
-        date: getCurrentDate(config.timezone)
+        date: getCurrentDate(config.timezone),
         completion,
         review,
         reward,
