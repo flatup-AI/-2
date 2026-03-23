@@ -338,11 +338,11 @@ function buildHomeView(member: Member, slackUserId: string, timezone = 'Asia/Tok
             style: 'primary',
             action_id: 'open_morning_modal',
           },
-          {
-            type: 'button',
-            text: { type: 'plain_text', text: '終礼を入力する', emoji: true },
-            action_id: 'open_evening_modal',
-          },
+         {
+  type: 'button',
+  text: { type: 'plain_text', text: '終礼を入力する', emoji: true },
+  action_id: 'open_end_of_day_modal',
+},
           {
             type: 'button',
             text: { type: 'plain_text', text: 'Homeを更新', emoji: true },
