@@ -2,7 +2,6 @@ import bolt from '@slack/bolt';
 import type { Block, KnownBlock } from '@slack/types';
 import cron from 'node-cron';
 import process from 'node:process';
-import http from "node:http";
 
 type Role = '管理者' | 'メンバー';
 
@@ -131,7 +130,7 @@ function readConfig(env = process.env): AppConfig {
     slackUseSocketMode,
     slackPublicChannelId: env.SLACK_PUBLIC_CHANNEL_ID || '',
     slackAdminUserIds: (env.SLACK_ADMIN_USER_IDS || '').split(',').map((v) => v.trim()).filter(Boolean),
-    port: Number(env.PORT || 3001),
+    port: Number(env.PORT || 3000),
     timezone: env.TZ || 'Asia/Tokyo',
   };
 }
@@ -147,12 +146,17 @@ function validateConfig(config: AppConfig): string[] {
 }
 
 function todayJst(now = new Date(), timezone = 'Asia/Tokyo'): string {
-  return new Intl.DateTimeFormat('ja-JP', {
+  const parts = new Intl.DateTimeFormat('ja-JP', {
     timeZone: timezone,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-  }).format(now);
+  }).formatToParts(now);
+
+  const year = parts.find((p) => p.type === 'year')?.value ?? '0000';
+  const month = parts.find((p) => p.type === 'month')?.value ?? '00';
+  const day = parts.find((p) => p.type === 'day')?.value ?? '00';
+  return `${year}-${month}-${day}`;
 }
 
 function makeKey(userId: string, date: string): string {
@@ -203,24 +207,43 @@ function toBlocks(input: (KnownBlock | Block)[]): (KnownBlock | Block)[] {
   return input;
 }
 
+function getCurrentDate(timezone = 'Asia/Tokyo'): string {
+  return todayJst(new Date(), timezone);
+}
+
+function cleanupOldEntries(_timezone = 'Asia/Tokyo'): void {
+  // 履歴は保持するため削除しない。
+}
+
+function dayChanged(lastDate: string | null, timezone = 'Asia/Tokyo'): boolean {
+  return lastDate !== getCurrentDate(timezone);
+}
+
 function buildHomeView(member: Member, slackUserId: string, timezone = 'Asia/Tokyo') {
-  const date = todayJst(new Date(), timezone);
+  const date = getCurrentDate(timezone);
   const morning = morningEntries.get(makeKey(slackUserId, date));
   const evening = eveningEntries.get(makeKey(slackUserId, date));
 
-  const teamMorningCount = Array.from(morningEntries.values()).filter((v) => v.date === date).length;
-  const teamEveningCount = Array.from(eveningEntries.values()).filter((v) => v.date === date).length;
+  const todayMorningEntries = Array.from(morningEntries.values()).filter((v) => v.date === date);
+  const todayEveningEntries = Array.from(eveningEntries.values()).filter((v) => v.date === date);
+
+  const teamMorningCount = todayMorningEntries.length;
+  const teamEveningCount = todayEveningEntries.length;
 
   const latestPosts = [
     ...Array.from(morningEntries.values()).map((v) => ({
       type: '朝礼',
       createdAt: v.createdAt,
-      text: `*${v.userName}*｜気分:${v.mood}/5 体調:${v.condition}/5\n業務: ${v.work}\n意識: ${v.guideline}`,
+      text: `*${v.userName}*｜${v.date}｜気分:${v.mood}/5 体調:${v.condition}/5
+業務: ${v.work}
+意識: ${v.guideline}`,
     })),
     ...Array.from(eveningEntries.values()).map((v) => ({
       type: '終礼',
       createdAt: v.createdAt,
-      text: `*${v.userName}*｜達成度:${v.completion}/5\n振り返り: ${v.review || 'なし'}\nコメント: ${v.reward}`,
+      text: `*${v.userName}*｜${v.date}｜達成度:${v.completion}/5
+振り返り: ${v.review || 'なし'}
+コメント: ${v.reward}`,
     })),
   ]
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
@@ -380,6 +403,7 @@ function buildEveningModal() {
 }
 
 const { App, LogLevel } = bolt;
+let lastCleanupDate: string | null = null;
 
 async function main() {
   const config = readConfig();
@@ -391,6 +415,7 @@ async function main() {
   }
 
   const adminUserIds = new Set(config.slackAdminUserIds);
+  lastCleanupDate = getCurrentDate(config.timezone);
 
   const app = new App({
     token: config.slackBotToken,
@@ -401,6 +426,10 @@ async function main() {
   });
 
   async function publishHome(userId: string) {
+    if (dayChanged(lastCleanupDate, config.timezone)) {
+      cleanupOldEntries(config.timezone);
+      lastCleanupDate = getCurrentDate(config.timezone);
+    }
     const info = await app.client.users.info({ user: userId });
     const realName = info.user?.real_name || info.user?.profile?.real_name || info.user?.name || 'スタッフ';
     const member = resolveMember(userId, adminUserIds, realName);
@@ -509,7 +538,7 @@ async function main() {
         userId: body.user.id,
         userName: member.name,
         department: member.department,
-        date: todayJst(new Date(), config.timezone),
+        date: getCurrentDate(config.timezone)
         mood,
         condition,
         work,
@@ -548,7 +577,7 @@ async function main() {
         userId: body.user.id,
         userName: member.name,
         department: member.department,
-        date: todayJst(new Date(), config.timezone),
+        date: getCurrentDate(config.timezone)
         completion,
         review,
         reward,
@@ -579,26 +608,32 @@ async function main() {
     }
   }
 
+  cron.schedule('0 0 * * *', async () => {
+    lastCleanupDate = getCurrentDate(config.timezone);
+
+    for (const userId of Array.from(slackUserMap.keys())) {
+      await publishHome(userId);
+    }
+  }, { timezone: config.timezone });
+
   cron.schedule('30 9 * * 1-5', async () => {
+    if (dayChanged(lastCleanupDate, config.timezone)) {
+      cleanupOldEntries(config.timezone);
+      lastCleanupDate = getCurrentDate(config.timezone);
+    }
     await notifyKnownUsers('朝礼');
   }, { timezone: config.timezone });
 
   cron.schedule('30 17 * * 1-5', async () => {
+    if (dayChanged(lastCleanupDate, config.timezone)) {
+      cleanupOldEntries(config.timezone);
+      lastCleanupDate = getCurrentDate(config.timezone);
+    }
     await notifyKnownUsers('終礼');
   }, { timezone: config.timezone });
 
   await app.start(config.port);
   console.log(`⚡️ Flatup Slack Home app is running on port ${config.port}`);
 }
-const port = Number(process.env.PORT || 10000);
 
-const healthServer = http.createServer((req, res) => {
-  res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
-  res.end("OK");
-});
-
-healthServer.listen(port, "0.0.0.0", () => {
-  console.log(`Health server listening on 0.0.0.0:${port}`);
-});
 void main();
-
