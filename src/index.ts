@@ -613,62 +613,54 @@ async function main() {
     }
   });
 
-  app.action('open_evening_modal', async ({ ack, body, client, logger }) => {
-    await ack();
-    try {
-      await client.views.open({
-        trigger_id: body.trigger_id,
-        view: buildEveningModal(),
-      });
-    } catch (error) {
-      logger.error(error);
-    }
-  });
 
-  app.view('morning_submit', async ({ ack, body, view, client, logger }) => {
-    await ack();
+app.view('morning_submit', async ({ ack, body, view, client, logger }) => {
+  await ack();
 
-    try {
-      const info = await client.users.info({ user: body.user.id });
-      const realName = info.user?.real_name || info.user?.profile?.real_name || info.user?.name || 'スタッフ';
-      const member = resolveMember(body.user.id, adminUserIds, realName);
-      const fortune = pickFortune(mood);
+  try {
+    const info = await client.users.info({ user: body.user.id });
+    const realName = info.user?.real_name || info.user?.profile?.real_name || info.user?.name || 'スタッフ';
+    const member = resolveMember(body.user.id, adminUserIds, realName);
 
-      const mood = Number(view.state.values.mood_block?.mood_action?.selected_option?.value || '3');
-      const condition = Number(view.state.values.condition_block?.condition_action?.selected_option?.value || '3');
-      const work = view.state.values.work_block?.work_action?.value || '';
-      const guideline = view.state.values.guideline_block?.guideline_action?.selected_option?.value || actionGuidelines[0];
-      const aiComment = aiCommentByGuideline[guideline] || '今日も前向きに取り組んでいきましょう。';
+    const mood = Number(view.state.values.mood_block?.mood_action?.selected_option?.value || '3');
+    const condition = Number(view.state.values.condition_block?.condition_action?.selected_option?.value || '3');
+    const work = view.state.values.work_block?.work_action?.value || '';
+    const guideline = view.state.values.guideline_block?.guideline_action?.selected_option?.value || actionGuidelines[0];
 
-      const entry: MorningEntry = {
-        id: `m_${Date.now()}`,
-        userId: body.user.id,
-        userName: member.name,
-        department: member.department,
-        date: getCurrentDate(config.timezone),
-        mood,
-        condition,
-        work,
-        guideline,
-        fortuneTitle: fortune.title,
-        fortuneText: fortune.text,
-        aiComment,
-        createdAt: new Date().toISOString(),
-      };
+    const fortune = pickFortune(mood);
+    const aiComment = aiCommentByGuideline[guideline] || '今日も前向きに取り組んでいきましょう。';
 
-      morningEntries.set(makeKey(body.user.id, entry.date), entry);
+    const entry: MorningEntry = {
+      id: `m_${Date.now()}`,
+      userId: body.user.id,
+      userName: member.name,
+      department: member.department,
+      date: getCurrentDate(config.timezone),
+      mood,
+      condition,
+      work,
+      guideline,
+      fortuneTitle: fortune.title,
+      fortuneText: fortune.text,
+      aiComment,
+      createdAt: new Date().toISOString(),
+    };
 
-      await postSharedMorning(entry);
-      await publishHome(body.user.id);
+    morningEntries.set(makeKey(body.user.id, entry.date), entry);
 
-      await client.chat.postMessage({
-        channel: body.user.id,
-        text: `朝礼を受け付けました。今日の占いは ${fortune.title} です。`,
-      });
-    } catch (error) {
-      logger.error(error);
-    }
-  });
+    await postSharedMorning(entry);
+    await publishHome(body.user.id);
+
+    await client.chat.postMessage({
+      channel: body.user.id,
+      text: `朝礼を受け付けました。今日の占いは ${fortune.title} です。`,
+    });
+  } catch (error) {
+    logger.error(error);
+  }
+});
+
+  
 
   app.view('evening_submit', async ({ ack, body, view, client, logger }) => {
     await ack();
