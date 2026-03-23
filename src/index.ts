@@ -2,6 +2,7 @@ import bolt from '@slack/bolt';
 import type { Block, KnownBlock } from '@slack/types';
 import cron from 'node-cron';
 import process from 'node:process';
+import http from 'node:http';
 
 type Role = '管理者' | 'メンバー';
 
@@ -89,18 +90,30 @@ const goodEveningMessages = [
 ] as const;
 
 const aiCommentByGuideline: Record<string, string> = {
-  '明るく元気な挨拶を自分からする': '今日のテーマは「挨拶」です。空気を変えるのは、いつも最初のひと言です。あなたから良い一日を始めましょう。',
-  '時間厳守（5分前行動・10分前集合）': '今日のテーマは「時間厳守」です。5分前の意識が段取りの質と信頼を高めます。',
-  '報告・連絡・相談を徹底する': '今日のテーマは「報連相」です。早めの共有は、チーム全体の安心と成果につながります。',
-  '嘘をつかず信用を守る': '今日のテーマは「信用」です。誠実な一つひとつの行動が、会社の信用を守ります。',
-  '仲間と協力業者を大切にする': '今日のテーマは「仲間を大切にする」です。思いやりのあるひと言と行動が現場を強くします。',
-  '整理整頓を徹底する': '今日のテーマは「整理整頓」です。整った環境は、整った仕事につながります。',
-  '気付いたらすぐ行動する': '今日のテーマは「すぐ行動」です。先手の一歩が信頼とスピードを生みます。',
-  '相手の為に一生懸命考える': '今日のテーマは「相手の為に考える」です。そのひと手間が、心に残る仕事をつくります。',
-  '感謝を忘れない': '今日のテーマは「感謝」です。感謝のある言葉と姿勢は、職場の空気を良くします。',
-  '仲間と意見交換をする': '今日のテーマは「意見交換」です。良い対話が、より良い仕事のスタートです。',
-  '状況を察して行動する': '今日のテーマは「察して動く」です。今なにが必要かを考えて動ける人が信頼を集めます。',
-  '常に新しい可能性に挑戦する': '今日のテーマは「挑戦」です。現状に満足しない一歩が、会社の未来をつくります。',
+  '明るく元気な挨拶を自分からする':
+    '今日のテーマは「挨拶」です。空気を変えるのは、いつも最初のひと言です。あなたから良い一日を始めましょう。',
+  '時間厳守（5分前行動・10分前集合）':
+    '今日のテーマは「時間厳守」です。5分前の意識が段取りの質と信頼を高めます。',
+  '報告・連絡・相談を徹底する':
+    '今日のテーマは「報連相」です。早めの共有は、チーム全体の安心と成果につながります。',
+  '嘘をつかず信用を守る':
+    '今日のテーマは「信用」です。誠実な一つひとつの行動が、会社の信用を守ります。',
+  '仲間と協力業者を大切にする':
+    '今日のテーマは「仲間を大切にする」です。思いやりのあるひと言と行動が現場を強くします。',
+  '整理整頓を徹底する':
+    '今日のテーマは「整理整頓」です。整った環境は、整った仕事につながります。',
+  '気付いたらすぐ行動する':
+    '今日のテーマは「すぐ行動」です。先手の一歩が信頼とスピードを生みます。',
+  '相手の為に一生懸命考える':
+    '今日のテーマは「相手の為に考える」です。そのひと手間が、心に残る仕事をつくります。',
+  '感謝を忘れない':
+    '今日のテーマは「感謝」です。感謝のある言葉と姿勢は、職場の空気を良くします。',
+  '仲間と意見交換をする':
+    '今日のテーマは「意見交換」です。良い対話が、より良い仕事のスタートです。',
+  '状況を察して行動する':
+    '今日のテーマは「察して動く」です。今なにが必要かを考えて動ける人が信頼を集めます。',
+  '常に新しい可能性に挑戦する':
+    '今日のテーマは「挑戦」です。現状に満足しない一歩が、会社の未来をつくります。',
 };
 
 const fixedMembers: Member[] = [
@@ -123,25 +136,35 @@ function parseBoolean(value: string | undefined, fallback = false): boolean {
 
 function readConfig(env = process.env): AppConfig {
   const slackUseSocketMode = parseBoolean(env.SLACK_USE_SOCKET_MODE, true);
+
   return {
     slackBotToken: env.SLACK_BOT_TOKEN || '',
     slackSigningSecret: env.SLACK_SIGNING_SECRET || '',
     slackAppToken: env.SLACK_APP_TOKEN || undefined,
     slackUseSocketMode,
     slackPublicChannelId: env.SLACK_PUBLIC_CHANNEL_ID || '',
-    slackAdminUserIds: (env.SLACK_ADMIN_USER_IDS || '').split(',').map((v) => v.trim()).filter(Boolean),
-    port: Number(env.PORT || 3000),
+    slackAdminUserIds: (env.SLACK_ADMIN_USER_IDS || '')
+      .split(',')
+      .map((v) => v.trim())
+      .filter(Boolean),
+    port: Number(env.APP_PORT || 3001),
     timezone: env.TZ || 'Asia/Tokyo',
   };
 }
 
 function validateConfig(config: AppConfig): string[] {
   const errors: string[] = [];
+
   if (!config.slackBotToken) errors.push('SLACK_BOT_TOKEN が未設定です。');
   if (!config.slackSigningSecret) errors.push('SLACK_SIGNING_SECRET が未設定です。');
-  if (config.slackUseSocketMode && !config.slackAppToken) errors.push('Socket Mode を使う場合は SLACK_APP_TOKEN が必要です。');
+  if (config.slackUseSocketMode && !config.slackAppToken) {
+    errors.push('Socket Mode を使う場合は SLACK_APP_TOKEN が必要です。');
+  }
   if (!config.slackPublicChannelId) errors.push('SLACK_PUBLIC_CHANNEL_ID が未設定です。');
-  if (!Number.isFinite(config.port) || config.port <= 0) errors.push('PORT は正の数で指定してください。');
+  if (!Number.isFinite(config.port) || config.port <= 0) {
+    errors.push('APP_PORT は正の数で指定してください。');
+  }
+
   return errors;
 }
 
@@ -156,7 +179,16 @@ function todayJst(now = new Date(), timezone = 'Asia/Tokyo'): string {
   const year = parts.find((p) => p.type === 'year')?.value ?? '0000';
   const month = parts.find((p) => p.type === 'month')?.value ?? '00';
   const day = parts.find((p) => p.type === 'day')?.value ?? '00';
+
   return `${year}-${month}-${day}`;
+}
+
+function getCurrentDate(timezone = 'Asia/Tokyo'): string {
+  return todayJst(new Date(), timezone);
+}
+
+function dayChanged(lastDate: string | null, timezone = 'Asia/Tokyo'): boolean {
+  return lastDate !== getCurrentDate(timezone);
 }
 
 function makeKey(userId: string, date: string): string {
@@ -207,18 +239,6 @@ function toBlocks(input: (KnownBlock | Block)[]): (KnownBlock | Block)[] {
   return input;
 }
 
-function getCurrentDate(timezone = 'Asia/Tokyo'): string {
-  return todayJst(new Date(), timezone);
-}
-
-function cleanupOldEntries(_timezone = 'Asia/Tokyo'): void {
-  // 履歴は保持するため削除しない。
-}
-
-function dayChanged(lastDate: string | null, timezone = 'Asia/Tokyo'): boolean {
-  return lastDate !== getCurrentDate(timezone);
-}
-
 function buildHomeView(member: Member, slackUserId: string, timezone = 'Asia/Tokyo') {
   const date = getCurrentDate(timezone);
   const morning = morningEntries.get(makeKey(slackUserId, date));
@@ -234,16 +254,12 @@ function buildHomeView(member: Member, slackUserId: string, timezone = 'Asia/Tok
     ...Array.from(morningEntries.values()).map((v) => ({
       type: '朝礼',
       createdAt: v.createdAt,
-      text: `*${v.userName}*｜${v.date}｜気分:${v.mood}/5 体調:${v.condition}/5
-業務: ${v.work}
-意識: ${v.guideline}`,
+      text: `*${v.userName}*｜${v.date}｜気分:${v.mood}/5 体調:${v.condition}/5\n業務: ${v.work}\n意識: ${v.guideline}`,
     })),
     ...Array.from(eveningEntries.values()).map((v) => ({
       type: '終礼',
       createdAt: v.createdAt,
-      text: `*${v.userName}*｜${v.date}｜達成度:${v.completion}/5
-振り返り: ${v.review || 'なし'}
-コメント: ${v.reward}`,
+      text: `*${v.userName}*｜${v.date}｜達成度:${v.completion}/5\n振り返り: ${v.review || 'なし'}\nコメント: ${v.reward}`,
     })),
   ]
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
@@ -263,9 +279,22 @@ function buildHomeView(member: Member, slackUserId: string, timezone = 'Asia/Tok
       {
         type: 'actions',
         elements: [
-          { type: 'button', text: { type: 'plain_text', text: '朝礼を入力する', emoji: true }, style: 'primary', action_id: 'open_morning_modal' },
-          { type: 'button', text: { type: 'plain_text', text: '終礼を入力する', emoji: true }, action_id: 'open_evening_modal' },
-          { type: 'button', text: { type: 'plain_text', text: 'Homeを更新', emoji: true }, action_id: 'refresh_home' },
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: '朝礼を入力する', emoji: true },
+            style: 'primary',
+            action_id: 'open_morning_modal',
+          },
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: '終礼を入力する', emoji: true },
+            action_id: 'open_evening_modal',
+          },
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: 'Homeを更新', emoji: true },
+            action_id: 'refresh_home',
+          },
         ],
       },
       {
@@ -328,7 +357,10 @@ function buildMorningModal() {
           type: 'static_select',
           action_id: 'mood_action',
           initial_option: { text: { type: 'plain_text', text: '3｜普通' }, value: '3' },
-          options: [1, 2, 3, 4, 5].map((n) => ({ text: { type: 'plain_text', text: `${n}｜${moodText(n)}` }, value: String(n) })),
+          options: [1, 2, 3, 4, 5].map((n) => ({
+            text: { type: 'plain_text', text: `${n}｜${moodText(n)}` },
+            value: String(n),
+          })),
         },
       },
       {
@@ -339,7 +371,10 @@ function buildMorningModal() {
           type: 'static_select',
           action_id: 'condition_action',
           initial_option: { text: { type: 'plain_text', text: '3｜普通' }, value: '3' },
-          options: [1, 2, 3, 4, 5].map((n) => ({ text: { type: 'plain_text', text: `${n}｜${moodText(n)}` }, value: String(n) })),
+          options: [1, 2, 3, 4, 5].map((n) => ({
+            text: { type: 'plain_text', text: `${n}｜${moodText(n)}` },
+            value: String(n),
+          })),
         },
       },
       {
@@ -360,7 +395,10 @@ function buildMorningModal() {
         element: {
           type: 'static_select',
           action_id: 'guideline_action',
-          options: actionGuidelines.map((g, i) => ({ text: { type: 'plain_text', text: `${i + 1}. ${g}`.slice(0, 75) }, value: g })),
+          options: actionGuidelines.map((g, i) => ({
+            text: { type: 'plain_text', text: `${i + 1}. ${g}`.slice(0, 75) },
+            value: g,
+          })),
         },
       },
     ]),
@@ -383,7 +421,10 @@ function buildEveningModal() {
           type: 'static_select',
           action_id: 'completion_action',
           initial_option: { text: { type: 'plain_text', text: '3｜普通' }, value: '3' },
-          options: [1, 2, 3, 4, 5].map((n) => ({ text: { type: 'plain_text', text: `${n}｜${completionText(n)}` }, value: String(n) })),
+          options: [1, 2, 3, 4, 5].map((n) => ({
+            text: { type: 'plain_text', text: `${n}｜${completionText(n)}` },
+            value: String(n),
+          })),
         },
       },
       {
@@ -408,6 +449,7 @@ let lastCleanupDate: string | null = null;
 async function main() {
   const config = readConfig();
   const errors = validateConfig(config);
+
   if (errors.length > 0) {
     console.error('Slackアプリを起動できません。設定を確認してください。');
     errors.forEach((e) => console.error(`- ${e}`));
@@ -423,13 +465,14 @@ async function main() {
     socketMode: config.slackUseSocketMode,
     appToken: config.slackAppToken,
     logLevel: LogLevel.INFO,
+    port: config.port,
   });
 
   async function publishHome(userId: string) {
     if (dayChanged(lastCleanupDate, config.timezone)) {
-      cleanupOldEntries(config.timezone);
       lastCleanupDate = getCurrentDate(config.timezone);
     }
+
     const info = await app.client.users.info({ user: userId });
     const realName = info.user?.real_name || info.user?.profile?.real_name || info.user?.name || 'スタッフ';
     const member = resolveMember(userId, adminUserIds, realName);
@@ -475,7 +518,12 @@ async function main() {
             { type: 'mrkdwn', text: `*日付*\n${entry.date}` },
             { type: 'mrkdwn', text: `*部署*\n${entry.department}` },
             { type: 'mrkdwn', text: `*達成度*\n${entry.completion}/5（${completionText(entry.completion)}）` },
-            { type: 'mrkdwn', text: `*投稿時刻*\n${new Date(entry.createdAt).toLocaleTimeString('ja-JP', { timeZone: config.timezone })}` },
+            {
+              type: 'mrkdwn',
+              text: `*投稿時刻*\n${new Date(entry.createdAt).toLocaleTimeString('ja-JP', {
+                timeZone: config.timezone,
+              })}`,
+            },
           ],
         },
         { type: 'section', text: { type: 'mrkdwn', text: `*振り返り・申し送り*\n${entry.review || 'なし'}` } },
@@ -504,7 +552,10 @@ async function main() {
   app.action('open_morning_modal', async ({ ack, body, client, logger }) => {
     await ack();
     try {
-      await client.views.open({ trigger_id: body.trigger_id, view: buildMorningModal() });
+      await client.views.open({
+        trigger_id: body.trigger_id,
+        view: buildMorningModal(),
+      });
     } catch (error) {
       logger.error(error);
     }
@@ -513,7 +564,10 @@ async function main() {
   app.action('open_evening_modal', async ({ ack, body, client, logger }) => {
     await ack();
     try {
-      await client.views.open({ trigger_id: body.trigger_id, view: buildEveningModal() });
+      await client.views.open({
+        trigger_id: body.trigger_id,
+        view: buildEveningModal(),
+      });
     } catch (error) {
       logger.error(error);
     }
@@ -521,6 +575,7 @@ async function main() {
 
   app.view('morning_submit', async ({ ack, body, view, client, logger }) => {
     await ack();
+
     try {
       const info = await client.users.info({ user: body.user.id });
       const realName = info.user?.real_name || info.user?.profile?.real_name || info.user?.name || 'スタッフ';
@@ -550,8 +605,10 @@ async function main() {
       };
 
       morningEntries.set(makeKey(body.user.id, entry.date), entry);
+
       await postSharedMorning(entry);
       await publishHome(body.user.id);
+
       await client.chat.postMessage({
         channel: body.user.id,
         text: `朝礼を受け付けました。今日の占いは ${fortune.title} です。`,
@@ -563,6 +620,7 @@ async function main() {
 
   app.view('evening_submit', async ({ ack, body, view, client, logger }) => {
     await ack();
+
     try {
       const info = await client.users.info({ user: body.user.id });
       const realName = info.user?.real_name || info.user?.profile?.real_name || info.user?.name || 'スタッフ';
@@ -585,8 +643,10 @@ async function main() {
       };
 
       eveningEntries.set(makeKey(body.user.id, entry.date), entry);
+
       await postSharedEvening(entry);
       await publishHome(body.user.id);
+
       await client.chat.postMessage({
         channel: body.user.id,
         text: '終礼を受け付けました。お疲れさまでした。',
@@ -601,39 +661,65 @@ async function main() {
     if (users.length === 0) return;
 
     for (const userId of users) {
-      const text = kind === '朝礼'
-        ? '9:30です。Homeタブから朝礼を入力してください。'
-        : '17:30です。Homeタブから終礼を入力してください。';
-      await app.client.chat.postMessage({ channel: userId, text });
+      const text =
+        kind === '朝礼'
+          ? '9:30です。Homeタブから朝礼を入力してください。'
+          : '17:30です。Homeタブから終礼を入力してください。';
+
+      await app.client.chat.postMessage({
+        channel: userId,
+        text,
+      });
     }
   }
 
-  cron.schedule('0 0 * * *', async () => {
-    lastCleanupDate = getCurrentDate(config.timezone);
-
-    for (const userId of Array.from(slackUserMap.keys())) {
-      await publishHome(userId);
-    }
-  }, { timezone: config.timezone });
-
-  cron.schedule('30 9 * * 1-5', async () => {
-    if (dayChanged(lastCleanupDate, config.timezone)) {
-      cleanupOldEntries(config.timezone);
+  cron.schedule(
+    '0 0 * * *',
+    async () => {
       lastCleanupDate = getCurrentDate(config.timezone);
-    }
-    await notifyKnownUsers('朝礼');
-  }, { timezone: config.timezone });
 
-  cron.schedule('30 17 * * 1-5', async () => {
-    if (dayChanged(lastCleanupDate, config.timezone)) {
-      cleanupOldEntries(config.timezone);
-      lastCleanupDate = getCurrentDate(config.timezone);
-    }
-    await notifyKnownUsers('終礼');
-  }, { timezone: config.timezone });
+      for (const userId of Array.from(slackUserMap.keys())) {
+        await publishHome(userId);
+      }
+    },
+    { timezone: config.timezone },
+  );
+
+  cron.schedule(
+    '30 9 * * 1-5',
+    async () => {
+      if (dayChanged(lastCleanupDate, config.timezone)) {
+        lastCleanupDate = getCurrentDate(config.timezone);
+      }
+      await notifyKnownUsers('朝礼');
+    },
+    { timezone: config.timezone },
+  );
+
+  cron.schedule(
+    '30 17 * * 1-5',
+    async () => {
+      if (dayChanged(lastCleanupDate, config.timezone)) {
+        lastCleanupDate = getCurrentDate(config.timezone);
+      }
+      await notifyKnownUsers('終礼');
+    },
+    { timezone: config.timezone },
+  );
 
   await app.start(config.port);
   console.log(`⚡️ Flatup Slack Home app is running on port ${config.port}`);
 }
+
+const webPort = Number(process.env.PORT || 10000);
+
+const healthServer = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+  res.end('OK');
+});
+
+healthServer.listen(webPort, '0.0.0.0', () => {
+  console.log(`Health server listening on 0.0.0.0:${webPort}`);
+});
 
 void main();
