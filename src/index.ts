@@ -500,8 +500,7 @@ async function main() {
         },
         { type: 'section', text: { type: 'mrkdwn', text: `*本日の業務内容*\n${entry.work}` } },
         { type: 'section', text: { type: 'mrkdwn', text: `*本日意識する行動指針*\n${entry.guideline}` } },
-        { type: 'section', text: { type: 'mrkdwn', text: `*今日の占い*\n${entry.fortuneTitle}｜${entry.fortuneText}` } },
-        { type: 'section', text: { type: 'mrkdwn', text: `*AIコメント*\n${entry.aiComment}` } },
+
       ]),
     });
   }
