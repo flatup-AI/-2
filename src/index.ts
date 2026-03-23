@@ -287,6 +287,21 @@ function moodText(value?: number): string {
 function completionText(value?: number): string {
   return ['-', 'ほぼ未達', 'やや未達', '普通', 'ほぼ達成', 'しっかり達成'][value || 0] || '-';
 }
+function pickReward(completion: number): string {
+  if (completion >= 5) {
+    return '一日のやり切り、素敵です。努力は必ず次の成果につながります。';
+  }
+  if (completion >= 4) {
+    return '良い流れです。この積み重ねが大きな成果になります。';
+  }
+  if (completion >= 3) {
+    return 'まずは一歩前進。明日はさらに良くしていきましょう。';
+  }
+  if (completion >= 2) {
+    return '今日は振り返りが大事。明日に活かしましょう。';
+  }
+  return '今日はしっかり休んで、また明日リスタートしましょう。';
+}
 
 function toBlocks(input: (KnownBlock | Block)[]): (KnownBlock | Block)[] {
   return input;
