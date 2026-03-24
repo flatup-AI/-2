@@ -49,8 +49,6 @@ type EveningEntry = {
 type AppConfig = {
   slackBotToken: string;
   slackSigningSecret: string;
-  slackAppToken?: string;
-  slackUseSocketMode: boolean;
   slackPublicChannelId: string;
   slackAdminUserIds: string[];
   port: number;
@@ -165,36 +163,27 @@ function parseBoolean(value: string | undefined, fallback = false): boolean {
 }
 
 function readConfig(env = process.env): AppConfig {
-  const slackUseSocketMode = parseBoolean(env.SLACK_USE_SOCKET_MODE, true);
-
   return {
     slackBotToken: env.SLACK_BOT_TOKEN || '',
     slackSigningSecret: env.SLACK_SIGNING_SECRET || '',
-    slackAppToken: env.SLACK_APP_TOKEN || undefined,
-    slackUseSocketMode,
     slackPublicChannelId: env.SLACK_PUBLIC_CHANNEL_ID || '',
     slackAdminUserIds: (env.SLACK_ADMIN_USER_IDS || '')
       .split(',')
       .map((v) => v.trim())
       .filter(Boolean),
-    port: Number(env.APP_PORT || 3001),
+    port: Number(env.PORT || 10000),
     timezone: env.TZ || 'Asia/Tokyo',
   };
 }
 
 function validateConfig(config: AppConfig): string[] {
   const errors: string[] = [];
-
   if (!config.slackBotToken) errors.push('SLACK_BOT_TOKEN が未設定です。');
   if (!config.slackSigningSecret) errors.push('SLACK_SIGNING_SECRET が未設定です。');
-  if (config.slackUseSocketMode && !config.slackAppToken) {
-    errors.push('Socket Mode を使う場合は SLACK_APP_TOKEN が必要です。');
-  }
   if (!config.slackPublicChannelId) errors.push('SLACK_PUBLIC_CHANNEL_ID が未設定です。');
   if (!Number.isFinite(config.port) || config.port <= 0) {
-    errors.push('APP_PORT は正の数で指定してください。');
+    errors.push('PORT は正の数で指定してください。');
   }
-
   return errors;
 }
 
@@ -231,7 +220,6 @@ function pickFortune(mood: number): Fortune {
   const shokichi = fortunes.filter((f) => f.title === '小吉');
   const kichi = fortunes.filter((f) => f.title === '吉');
   const kyo = fortunes.filter((f) => f.title === '凶');
-  const daikyo = fortunes.filter((f) => f.title === '大凶');
 
   let pool: Fortune[] = [];
 
@@ -260,6 +248,17 @@ function pickFortune(mood: number): Fortune {
 
   return pool[Math.floor(Math.random() * pool.length)];
 }
+
+function pickReward(completion: number): string {
+  if (completion >= 5) {
+    return goodEveningMessages[Math.floor(Math.random() * goodEveningMessages.length)];
+  }
+  if (completion >= 4) return '良い流れです。この積み重ねが大きな成果になります。';
+  if (completion >= 3) return 'まずは一歩前進。明日はさらに良くしていきましょう。';
+  if (completion >= 2) return '今日は振り返りが大事。明日に活かしましょう。';
+  return '今日はしっかり休んで、また明日リスタートしましょう。';
+}
+
 function resolveMember(slackUserId: string, adminUserIds: Set<string>, slackRealName?: string): Member {
   const cached = slackUserMap.get(slackUserId);
   if (cached) return cached;
@@ -286,21 +285,6 @@ function moodText(value?: number): string {
 
 function completionText(value?: number): string {
   return ['-', 'ほぼ未達', 'やや未達', '普通', 'ほぼ達成', 'しっかり達成'][value || 0] || '-';
-}
-function pickReward(completion: number): string {
-  if (completion >= 5) {
-    return '一日のやり切り、素敵です。努力は必ず次の成果につながります。';
-  }
-  if (completion >= 4) {
-    return '良い流れです。この積み重ねが大きな成果になります。';
-  }
-  if (completion >= 3) {
-    return 'まずは一歩前進。明日はさらに良くしていきましょう。';
-  }
-  if (completion >= 2) {
-    return '今日は振り返りが大事。明日に活かしましょう。';
-  }
-  return '今日はしっかり休んで、また明日リスタートしましょう。';
 }
 
 function toBlocks(input: (KnownBlock | Block)[]): (KnownBlock | Block)[] {
@@ -353,11 +337,11 @@ function buildHomeView(member: Member, slackUserId: string, timezone = 'Asia/Tok
             style: 'primary',
             action_id: 'open_morning_modal',
           },
-         {
-  type: 'button',
-  text: { type: 'plain_text', text: '終礼を入力する', emoji: true },
-  action_id: 'open_end_of_day_modal',
-},
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: '終礼を入力する', emoji: true },
+            action_id: 'open_end_of_day_modal',
+          },
           {
             type: 'button',
             text: { type: 'plain_text', text: 'Homeを更新', emoji: true },
@@ -537,8 +521,8 @@ async function main() {
   async function publishHome(userId: string) {
     if (dayChanged(lastCleanupDate, config.timezone)) {
       lastCleanupDate = getCurrentDate(config.timezone);
-        morningEntries.clear();
-  eveningEntries.clear();
+      morningEntries.clear();
+      eveningEntries.clear();
     }
 
     const info = await app.client.users.info({ user: userId });
@@ -568,7 +552,6 @@ async function main() {
         },
         { type: 'section', text: { type: 'mrkdwn', text: `*本日の業務内容*\n${entry.work}` } },
         { type: 'section', text: { type: 'mrkdwn', text: `*本日意識する行動指針*\n${entry.guideline}` } },
-
       ]),
     });
   }
@@ -607,18 +590,14 @@ async function main() {
     }
   });
 
-app.action('open_end_of_day_modal', async ({ ack, body, client, logger }) => {
-  await ack();
-  try {
-    console.log('終礼ボタンが押されました');
-    await client.views.open({
-      trigger_id: body.trigger_id,
-      view: buildEveningModal(),
-    });
-  } catch (error) {
-    logger.error(error);
-  }
-});
+  app.action('refresh_home', async ({ ack, body, logger }) => {
+    await ack();
+    try {
+      await publishHome(body.user.id);
+    } catch (error) {
+      logger.error(error);
+    }
+  });
 
   app.action('open_morning_modal', async ({ ack, body, client, logger }) => {
     await ack();
@@ -632,54 +611,64 @@ app.action('open_end_of_day_modal', async ({ ack, body, client, logger }) => {
     }
   });
 
+  app.action('open_end_of_day_modal', async ({ ack, body, client, logger }) => {
+    await ack();
+    try {
+      console.log('終礼ボタンが押されました');
+      await client.views.open({
+        trigger_id: body.trigger_id,
+        view: buildEveningModal(),
+      });
+    } catch (error) {
+      logger.error(error);
+    }
+  });
 
-app.view('morning_submit', async ({ ack, body, view, client, logger }) => {
-  await ack();
+  app.view('morning_submit', async ({ ack, body, view, client, logger }) => {
+    await ack();
 
-  try {
-    const info = await client.users.info({ user: body.user.id });
-    const realName = info.user?.real_name || info.user?.profile?.real_name || info.user?.name || 'スタッフ';
-    const member = resolveMember(body.user.id, adminUserIds, realName);
+    try {
+      const info = await client.users.info({ user: body.user.id });
+      const realName = info.user?.real_name || info.user?.profile?.real_name || info.user?.name || 'スタッフ';
+      const member = resolveMember(body.user.id, adminUserIds, realName);
 
-    const mood = Number(view.state.values.mood_block?.mood_action?.selected_option?.value || '3');
-    const condition = Number(view.state.values.condition_block?.condition_action?.selected_option?.value || '3');
-    const work = view.state.values.work_block?.work_action?.value || '';
-    const guideline = view.state.values.guideline_block?.guideline_action?.selected_option?.value || actionGuidelines[0];
+      const mood = Number(view.state.values.mood_block?.mood_action?.selected_option?.value || '3');
+      const condition = Number(view.state.values.condition_block?.condition_action?.selected_option?.value || '3');
+      const work = view.state.values.work_block?.work_action?.value || '';
+      const guideline = view.state.values.guideline_block?.guideline_action?.selected_option?.value || actionGuidelines[0];
 
-    const fortune = pickFortune(mood);
-    const aiComment = aiCommentByGuideline[guideline] || '今日も前向きに取り組んでいきましょう。';
+      const fortune = pickFortune(mood);
+      const aiComment = aiCommentByGuideline[guideline] || '今日も前向きに取り組んでいきましょう。';
 
-    const entry: MorningEntry = {
-      id: `m_${Date.now()}`,
-      userId: body.user.id,
-      userName: member.name,
-      department: member.department,
-      date: getCurrentDate(config.timezone),
-      mood,
-      condition,
-      work,
-      guideline,
-      fortuneTitle: fortune.title,
-      fortuneText: fortune.text,
-      aiComment,
-      createdAt: new Date().toISOString(),
-    };
+      const entry: MorningEntry = {
+        id: `m_${Date.now()}`,
+        userId: body.user.id,
+        userName: member.name,
+        department: member.department,
+        date: getCurrentDate(config.timezone),
+        mood,
+        condition,
+        work,
+        guideline,
+        fortuneTitle: fortune.title,
+        fortuneText: fortune.text,
+        aiComment,
+        createdAt: new Date().toISOString(),
+      };
 
-    morningEntries.set(makeKey(body.user.id, entry.date), entry);
+      morningEntries.set(makeKey(body.user.id, entry.date), entry);
 
-    await postSharedMorning(entry);
-    await publishHome(body.user.id);
+      await postSharedMorning(entry);
+      await publishHome(body.user.id);
 
-    await client.chat.postMessage({
-      channel: body.user.id,
-      text: `朝礼を受け付けました。今日の占いは ${fortune.title} です。`,
-    });
-  } catch (error) {
-    logger.error(error);
-  }
-});
-
-  
+      await client.chat.postMessage({
+        channel: body.user.id,
+        text: `朝礼を受け付けました。今日の占いは ${fortune.title} です。`,
+      });
+    } catch (error) {
+      logger.error(error);
+    }
+  });
 
   app.view('evening_submit', async ({ ack, body, view, client, logger }) => {
     await ack();
@@ -740,8 +729,8 @@ app.view('morning_submit', async ({ ack, body, view, client, logger }) => {
     '0 0 * * *',
     async () => {
       lastCleanupDate = getCurrentDate(config.timezone);
-        morningEntries.clear();
-  eveningEntries.clear();
+      morningEntries.clear();
+      eveningEntries.clear();
 
       for (const userId of Array.from(slackUserMap.keys())) {
         await publishHome(userId);
@@ -755,6 +744,8 @@ app.view('morning_submit', async ({ ack, body, view, client, logger }) => {
     async () => {
       if (dayChanged(lastCleanupDate, config.timezone)) {
         lastCleanupDate = getCurrentDate(config.timezone);
+        morningEntries.clear();
+        eveningEntries.clear();
       }
       await notifyKnownUsers('朝礼');
     },
@@ -766,6 +757,8 @@ app.view('morning_submit', async ({ ack, body, view, client, logger }) => {
     async () => {
       if (dayChanged(lastCleanupDate, config.timezone)) {
         lastCleanupDate = getCurrentDate(config.timezone);
+        morningEntries.clear();
+        eveningEntries.clear();
       }
       await notifyKnownUsers('終礼');
     },
@@ -776,15 +769,7 @@ app.view('morning_submit', async ({ ack, body, view, client, logger }) => {
   console.log(`⚡️ Flatup Slack Home app is running on port ${config.port}`);
 }
 
-const webPort = Number(process.env.PORT || 10000);
-
-const healthServer = http.createServer((req, res) => {
-  res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-  res.end('OK');
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
 });
-
-healthServer.listen(webPort, '0.0.0.0', () => {
-  console.log(`Health server listening on 0.0.0.0:${webPort}`);
-});
-
-void main();
