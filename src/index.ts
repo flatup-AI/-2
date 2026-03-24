@@ -539,6 +539,8 @@ async function main() {
   async function publishHome(userId: string) {
     if (dayChanged(lastCleanupDate, config.timezone)) {
       lastCleanupDate = getCurrentDate(config.timezone);
+        morningEntries.clear();
+  eveningEntries.clear();
     }
 
     const info = await app.client.users.info({ user: userId });
@@ -740,6 +742,8 @@ app.view('morning_submit', async ({ ack, body, view, client, logger }) => {
     '0 0 * * *',
     async () => {
       lastCleanupDate = getCurrentDate(config.timezone);
+        morningEntries.clear();
+  eveningEntries.clear();
 
       for (const userId of Array.from(slackUserMap.keys())) {
         await publishHome(userId);
