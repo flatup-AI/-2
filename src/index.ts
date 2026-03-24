@@ -530,7 +530,6 @@ async function main() {
   const app = new App({
     token: config.slackBotToken,
     signingSecret: config.slackSigningSecret,
-
     logLevel: LogLevel.INFO,
     port: config.port,
   });
