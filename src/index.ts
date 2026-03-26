@@ -2,7 +2,11 @@ import bolt from '@slack/bolt';
 import type { Block, KnownBlock } from '@slack/types';
 import cron from 'node-cron';
 import process from 'node:process';
-import http from 'node:http';
+
+// ChatGPT返信を使う場合だけ有効化
+// Renderの環境変数に OPENAI_API_KEY を入れてください
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5-mini';
 
 type Role = '管理者' | 'メンバー';
 
@@ -118,30 +122,18 @@ const goodEveningMessages = [
 ] as const;
 
 const aiCommentByGuideline: Record<string, string> = {
-  '明るく元気な挨拶を自分からする':
-    '今日のテーマは「挨拶」です。空気を変えるのは、いつも最初のひと言です。あなたから良い一日を始めましょう。',
-  '時間厳守（5分前行動・10分前集合）':
-    '今日のテーマは「時間厳守」です。5分前の意識が段取りの質と信頼を高めます。',
-  '報告・連絡・相談を徹底する':
-    '今日のテーマは「報連相」です。早めの共有は、チーム全体の安心と成果につながります。',
-  '嘘をつかず信用を守る':
-    '今日のテーマは「信用」です。誠実な一つひとつの行動が、会社の信用を守ります。',
-  '仲間と協力業者を大切にする':
-    '今日のテーマは「仲間を大切にする」です。思いやりのあるひと言と行動が現場を強くします。',
-  '整理整頓を徹底する':
-    '今日のテーマは「整理整頓」です。整った環境は、整った仕事につながります。',
-  '気付いたらすぐ行動する':
-    '今日のテーマは「すぐ行動」です。先手の一歩が信頼とスピードを生みます。',
-  '相手の為に一生懸命考える':
-    '今日のテーマは「相手の為に考える」です。そのひと手間が、心に残る仕事をつくります。',
-  '感謝を忘れない':
-    '今日のテーマは「感謝」です。感謝のある言葉と姿勢は、職場の空気を良くします。',
-  '仲間と意見交換をする':
-    '今日のテーマは「意見交換」です。良い対話が、より良い仕事のスタートです。',
-  '状況を察して行動する':
-    '今日のテーマは「察して動く」です。今なにが必要かを考えて動ける人が信頼を集めます。',
-  '常に新しい可能性に挑戦する':
-    '今日のテーマは「挑戦」です。現状に満足しない一歩が、会社の未来をつくります。',
+  '明るく元気な挨拶を自分からする': '今日のテーマは「挨拶」です。空気を変えるのは、いつも最初のひと言です。あなたから良い一日を始めましょう。',
+  '時間厳守（5分前行動・10分前集合）': '今日のテーマは「時間厳守」です。5分前の意識が段取りの質と信頼を高めます。',
+  '報告・連絡・相談を徹底する': '今日のテーマは「報連相」です。早めの共有は、チーム全体の安心と成果につながります。',
+  '嘘をつかず信用を守る': '今日のテーマは「信用」です。誠実な一つひとつの行動が、会社の信用を守ります。',
+  '仲間と協力業者を大切にする': '今日のテーマは「仲間を大切にする」です。思いやりのあるひと言と行動が現場を強くします。',
+  '整理整頓を徹底する': '今日のテーマは「整理整頓」です。整った環境は、整った仕事につながります。',
+  '気付いたらすぐ行動する': '今日のテーマは「すぐ行動」です。先手の一歩が信頼とスピードを生みます。',
+  '相手の為に一生懸命考える': '今日のテーマは「相手の為に考える」です。そのひと手間が、心に残る仕事をつくります。',
+  '感謝を忘れない': '今日のテーマは「感謝」です。感謝のある言葉と姿勢は、職場の空気を良くします。',
+  '仲間と意見交換をする': '今日のテーマは「意見交換」です。良い対話が、より良い仕事のスタートです。',
+  '状況を察して行動する': '今日のテーマは「察して動く」です。今なにが必要かを考えて動ける人が信頼を集めます。',
+  '常に新しい可能性に挑戦する': '今日のテーマは「挑戦」です。現状に満足しない一歩が、会社の未来をつくります。',
 };
 
 const fixedMembers: Member[] = [
@@ -157,20 +149,12 @@ const slackUserMap = new Map<string, Member>();
 const morningEntries = new Map<string, MorningEntry>();
 const eveningEntries = new Map<string, EveningEntry>();
 
-function parseBoolean(value: string | undefined, fallback = false): boolean {
-  if (value == null || value === '') return fallback;
-  return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
-}
-
 function readConfig(env = process.env): AppConfig {
   return {
     slackBotToken: env.SLACK_BOT_TOKEN || '',
     slackSigningSecret: env.SLACK_SIGNING_SECRET || '',
     slackPublicChannelId: env.SLACK_PUBLIC_CHANNEL_ID || '',
-    slackAdminUserIds: (env.SLACK_ADMIN_USER_IDS || '')
-      .split(',')
-      .map((v) => v.trim())
-      .filter(Boolean),
+    slackAdminUserIds: (env.SLACK_ADMIN_USER_IDS || '').split(',').map((v) => v.trim()).filter(Boolean),
     port: Number(env.PORT || 10000),
     timezone: env.TZ || 'Asia/Tokyo',
   };
@@ -181,9 +165,7 @@ function validateConfig(config: AppConfig): string[] {
   if (!config.slackBotToken) errors.push('SLACK_BOT_TOKEN が未設定です。');
   if (!config.slackSigningSecret) errors.push('SLACK_SIGNING_SECRET が未設定です。');
   if (!config.slackPublicChannelId) errors.push('SLACK_PUBLIC_CHANNEL_ID が未設定です。');
-  if (!Number.isFinite(config.port) || config.port <= 0) {
-    errors.push('PORT は正の数で指定してください。');
-  }
+  if (!Number.isFinite(config.port) || config.port <= 0) errors.push('PORT は正の数で指定してください。');
   return errors;
 }
 
@@ -198,7 +180,6 @@ function todayJst(now = new Date(), timezone = 'Asia/Tokyo'): string {
   const year = parts.find((p) => p.type === 'year')?.value ?? '0000';
   const month = parts.find((p) => p.type === 'month')?.value ?? '00';
   const day = parts.find((p) => p.type === 'day')?.value ?? '00';
-
   return `${year}-${month}-${day}`;
 }
 
@@ -224,46 +205,92 @@ function pickFortune(mood: number): Fortune {
   let pool: Fortune[] = [];
 
   if (mood <= 2) {
-    pool = [
-      ...daikichi, ...daikichi, ...daikichi,
-      ...chukichi, ...chukichi,
-      ...shokichi,
-    ];
+    pool = [...daikichi, ...daikichi, ...daikichi, ...chukichi, ...chukichi, ...shokichi];
   } else if (mood === 3) {
-    pool = [
-      ...daikichi,
-      ...chukichi, ...chukichi,
-      ...shokichi, ...shokichi,
-      ...kichi,
-    ];
+    pool = [...daikichi, ...chukichi, ...chukichi, ...shokichi, ...shokichi, ...kichi];
   } else {
-    pool = [
-      ...daikichi,
-      ...chukichi,
-      ...shokichi, ...shokichi,
-      ...kichi, ...kichi,
-      ...kyo,
-    ];
+    pool = [...daikichi, ...chukichi, ...shokichi, ...shokichi, ...kichi, ...kichi, ...kyo];
   }
 
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
 function pickReward(completion: number): string {
-  if (completion >= 5) {
-    return goodEveningMessages[Math.floor(Math.random() * goodEveningMessages.length)];
-  }
+  if (completion >= 5) return goodEveningMessages[Math.floor(Math.random() * goodEveningMessages.length)];
   if (completion >= 4) return '良い流れです。この積み重ねが大きな成果になります。';
   if (completion >= 3) return 'まずは一歩前進。明日はさらに良くしていきましょう。';
   if (completion >= 2) return '今日は振り返りが大事。明日に活かしましょう。';
   return '今日はしっかり休んで、また明日リスタートしましょう。';
 }
 
+async function generateChatReply(params: {
+  kind: 'morning' | 'evening';
+  userName: string;
+  mood?: number;
+  condition?: number;
+  guideline?: string;
+  work?: string;
+  completion?: number;
+  review?: string;
+}): Promise<string> {
+  if (!OPENAI_API_KEY) {
+    if (params.kind === 'morning') {
+      return aiCommentByGuideline[params.guideline || ''] || '今日も前向きに取り組んでいきましょう。';
+    }
+    return pickReward(params.completion || 3);
+  }
+
+  const prompt = params.kind === 'morning'
+    ? `あなたはフラットアップ朝礼AIです。\n短く前向きで、現場感があり、押しつけすぎない一言を返してください。\n\n名前: ${params.userName}\n気分: ${params.mood}/5\n体調: ${params.condition}/5\n本日の業務: ${params.work}\n今日意識すること: ${params.guideline}\n\n120文字以内で、日本語で返してください。`
+    : `あなたはフラットアップ終礼AIです。\n短く前向きで、努力をねぎらい、次につながる一言を返してください。\n\n名前: ${params.userName}\n達成度: ${params.completion}/5\n振り返り: ${params.review || 'なし'}\n\n120文字以内で、日本語で返してください。`;
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: OPENAI_MODEL,
+        messages: [
+          { role: 'system', content: 'あなたは日本語で簡潔に返答する社内アシスタントです。' },
+          { role: 'user', content: prompt },
+        ],
+        temperature: 0.8,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`OpenAI API error: ${response.status}`);
+    }
+
+    const data = await response.json() as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+
+    const content = data.choices?.[0]?.message?.content?.trim();
+    if (content) return content;
+  } catch (error) {
+    console.error('ChatGPT返信生成失敗:', error);
+  }
+
+  if (params.kind === 'morning') {
+    return aiCommentByGuideline[params.guideline || ''] || '今日も前向きに取り組んでいきましょう。';
+  }
+  return pickReward(params.completion || 3);
+}
+
+function normalizeName(name: string): string {
+  return name.replace(/\s/g, '');
+}
+
 function resolveMember(slackUserId: string, adminUserIds: Set<string>, slackRealName?: string): Member {
   const cached = slackUserMap.get(slackUserId);
   if (cached) return cached;
 
-  const found = fixedMembers.find((m) => m.name === slackRealName);
+  const realName = normalizeName(slackRealName || '');
+  const found = fixedMembers.find((m) => normalizeName(m.name) === realName);
   if (found) {
     slackUserMap.set(slackUserId, found);
     return found;
@@ -331,22 +358,9 @@ function buildHomeView(member: Member, slackUserId: string, timezone = 'Asia/Tok
       {
         type: 'actions',
         elements: [
-          {
-            type: 'button',
-            text: { type: 'plain_text', text: '朝礼を入力する', emoji: true },
-            style: 'primary',
-            action_id: 'open_morning_modal',
-          },
-          {
-            type: 'button',
-            text: { type: 'plain_text', text: '終礼を入力する', emoji: true },
-            action_id: 'open_end_of_day_modal',
-          },
-          {
-            type: 'button',
-            text: { type: 'plain_text', text: 'Homeを更新', emoji: true },
-            action_id: 'refresh_home',
-          },
+          { type: 'button', text: { type: 'plain_text', text: '朝礼を入力する', emoji: true }, style: 'primary', action_id: 'open_morning_modal' },
+          { type: 'button', text: { type: 'plain_text', text: '終礼を入力する', emoji: true }, action_id: 'open_end_of_day_modal' },
+          { type: 'button', text: { type: 'plain_text', text: 'Homeを更新', emoji: true }, action_id: 'refresh_home' },
         ],
       },
       {
@@ -409,10 +423,7 @@ function buildMorningModal() {
           type: 'static_select',
           action_id: 'mood_action',
           initial_option: { text: { type: 'plain_text', text: '3｜普通' }, value: '3' },
-          options: [1, 2, 3, 4, 5].map((n) => ({
-            text: { type: 'plain_text', text: `${n}｜${moodText(n)}` },
-            value: String(n),
-          })),
+          options: [1, 2, 3, 4, 5].map((n) => ({ text: { type: 'plain_text', text: `${n}｜${moodText(n)}` }, value: String(n) })),
         },
       },
       {
@@ -423,10 +434,7 @@ function buildMorningModal() {
           type: 'static_select',
           action_id: 'condition_action',
           initial_option: { text: { type: 'plain_text', text: '3｜普通' }, value: '3' },
-          options: [1, 2, 3, 4, 5].map((n) => ({
-            text: { type: 'plain_text', text: `${n}｜${moodText(n)}` },
-            value: String(n),
-          })),
+          options: [1, 2, 3, 4, 5].map((n) => ({ text: { type: 'plain_text', text: `${n}｜${moodText(n)}` }, value: String(n) })),
         },
       },
       {
@@ -447,10 +455,7 @@ function buildMorningModal() {
         element: {
           type: 'static_select',
           action_id: 'guideline_action',
-          options: actionGuidelines.map((g, i) => ({
-            text: { type: 'plain_text', text: `${i + 1}. ${g}`.slice(0, 75) },
-            value: g,
-          })),
+          options: actionGuidelines.map((g, i) => ({ text: { type: 'plain_text', text: `${i + 1}. ${g}`.slice(0, 75) }, value: g })),
         },
       },
     ]),
@@ -473,10 +478,7 @@ function buildEveningModal() {
           type: 'static_select',
           action_id: 'completion_action',
           initial_option: { text: { type: 'plain_text', text: '3｜普通' }, value: '3' },
-          options: [1, 2, 3, 4, 5].map((n) => ({
-            text: { type: 'plain_text', text: `${n}｜${completionText(n)}` },
-            value: String(n),
-          })),
+          options: [1, 2, 3, 4, 5].map((n) => ({ text: { type: 'plain_text', text: `${n}｜${completionText(n)}` }, value: String(n) })),
         },
       },
       {
@@ -501,7 +503,6 @@ let lastCleanupDate: string | null = null;
 async function main() {
   const config = readConfig();
   const errors = validateConfig(config);
-
   if (errors.length > 0) {
     console.error('Slackアプリを起動できません。設定を確認してください。');
     errors.forEach((e) => console.error(`- ${e}`));
@@ -541,17 +542,7 @@ async function main() {
       text: `【朝礼】${entry.userName}｜${entry.date}`,
       blocks: toBlocks([
         { type: 'header', text: { type: 'plain_text', text: `【朝礼】${entry.userName}`, emoji: true } },
-        {
-          type: 'section',
-          fields: [
-            { type: 'mrkdwn', text: `*日付*\n${entry.date}` },
-            { type: 'mrkdwn', text: `*部署*\n${entry.department}` },
-            { type: 'mrkdwn', text: `*気分*\n${entry.mood}/5（${moodText(entry.mood)}）` },
-            { type: 'mrkdwn', text: `*体調*\n${entry.condition}/5（${moodText(entry.condition)}）` },
-          ],
-        },
-        { type: 'section', text: { type: 'mrkdwn', text: `*本日の業務内容*\n${entry.work}` } },
-        { type: 'section', text: { type: 'mrkdwn', text: `*本日意識する行動指針*\n${entry.guideline}` } },
+        { type: 'section', text: { type: 'mrkdwn', text: `*${entry.userName}*｜${entry.date}\n気分:${entry.mood}/5 体調:${entry.condition}/5\n業務: ${entry.work}\n意識: ${entry.guideline}` } },
       ]),
     });
   }
@@ -562,22 +553,7 @@ async function main() {
       text: `【終礼】${entry.userName}｜${entry.date}`,
       blocks: toBlocks([
         { type: 'header', text: { type: 'plain_text', text: `【終礼】${entry.userName}`, emoji: true } },
-        {
-          type: 'section',
-          fields: [
-            { type: 'mrkdwn', text: `*日付*\n${entry.date}` },
-            { type: 'mrkdwn', text: `*部署*\n${entry.department}` },
-            { type: 'mrkdwn', text: `*達成度*\n${entry.completion}/5（${completionText(entry.completion)}）` },
-            {
-              type: 'mrkdwn',
-              text: `*投稿時刻*\n${new Date(entry.createdAt).toLocaleTimeString('ja-JP', {
-                timeZone: config.timezone,
-              })}`,
-            },
-          ],
-        },
-        { type: 'section', text: { type: 'mrkdwn', text: `*振り返り・申し送り*\n${entry.review || 'なし'}` } },
-        { type: 'section', text: { type: 'mrkdwn', text: `*フィードバック*\n${entry.reward}` } },
+        { type: 'section', text: { type: 'mrkdwn', text: `*${entry.userName}*｜${entry.date}\n達成度:${entry.completion}/5\n振り返り: ${entry.review || 'なし'}\nコメント: ${entry.reward}` } },
       ]),
     });
   }
@@ -602,10 +578,7 @@ async function main() {
   app.action('open_morning_modal', async ({ ack, body, client, logger }) => {
     await ack();
     try {
-      await client.views.open({
-        trigger_id: body.trigger_id,
-        view: buildMorningModal(),
-      });
+      await client.views.open({ trigger_id: body.trigger_id, view: buildMorningModal() });
     } catch (error) {
       logger.error(error);
     }
@@ -614,11 +587,7 @@ async function main() {
   app.action('open_end_of_day_modal', async ({ ack, body, client, logger }) => {
     await ack();
     try {
-      console.log('終礼ボタンが押されました');
-      await client.views.open({
-        trigger_id: body.trigger_id,
-        view: buildEveningModal(),
-      });
+      await client.views.open({ trigger_id: body.trigger_id, view: buildEveningModal() });
     } catch (error) {
       logger.error(error);
     }
@@ -626,7 +595,6 @@ async function main() {
 
   app.view('morning_submit', async ({ ack, body, view, client, logger }) => {
     await ack();
-
     try {
       const info = await client.users.info({ user: body.user.id });
       const realName = info.user?.real_name || info.user?.profile?.real_name || info.user?.name || 'スタッフ';
@@ -638,7 +606,14 @@ async function main() {
       const guideline = view.state.values.guideline_block?.guideline_action?.selected_option?.value || actionGuidelines[0];
 
       const fortune = pickFortune(mood);
-      const aiComment = aiCommentByGuideline[guideline] || '今日も前向きに取り組んでいきましょう。';
+      const aiComment = await generateChatReply({
+        kind: 'morning',
+        userName: member.name,
+        mood,
+        condition,
+        guideline,
+        work,
+      });
 
       const entry: MorningEntry = {
         id: `m_${Date.now()}`,
@@ -657,14 +632,9 @@ async function main() {
       };
 
       morningEntries.set(makeKey(body.user.id, entry.date), entry);
-
       await postSharedMorning(entry);
       await publishHome(body.user.id);
-
-      await client.chat.postMessage({
-        channel: body.user.id,
-        text: `朝礼を受け付けました。今日の占いは ${fortune.title} です。`,
-      });
+      await client.chat.postMessage({ channel: body.user.id, text: `朝礼を受け付けました。今日の占いは ${fortune.title} です。` });
     } catch (error) {
       logger.error(error);
     }
@@ -672,7 +642,6 @@ async function main() {
 
   app.view('evening_submit', async ({ ack, body, view, client, logger }) => {
     await ack();
-
     try {
       const info = await client.users.info({ user: body.user.id });
       const realName = info.user?.real_name || info.user?.profile?.real_name || info.user?.name || 'スタッフ';
@@ -680,7 +649,12 @@ async function main() {
 
       const completion = Number(view.state.values.completion_block?.completion_action?.selected_option?.value || '3');
       const review = view.state.values.review_block?.review_action?.value || '';
-      const reward = pickReward(completion);
+      const reward = await generateChatReply({
+        kind: 'evening',
+        userName: member.name,
+        completion,
+        review,
+      });
 
       const entry: EveningEntry = {
         id: `e_${Date.now()}`,
@@ -695,14 +669,9 @@ async function main() {
       };
 
       eveningEntries.set(makeKey(body.user.id, entry.date), entry);
-
       await postSharedEvening(entry);
       await publishHome(body.user.id);
-
-      await client.chat.postMessage({
-        channel: body.user.id,
-        text: '終礼を受け付けました。お疲れさまでした。',
-      });
+      await client.chat.postMessage({ channel: body.user.id, text: '終礼を受け付けました。お疲れさまでした。' });
     } catch (error) {
       logger.error(error);
     }
@@ -713,63 +682,36 @@ async function main() {
     if (users.length === 0) return;
 
     for (const userId of users) {
-      const text =
-        kind === '朝礼'
-          ? '9:30です。Homeタブから朝礼を入力してください。'
-          : '17:30です。Homeタブから終礼を入力してください。';
-
-      await app.client.chat.postMessage({
-        channel: userId,
-        text,
-      });
+      const text = kind === '朝礼'
+        ? '9:30です。Homeタブから朝礼を入力してください。'
+        : '17:30です。Homeタブから終礼を入力してください。';
+      await app.client.chat.postMessage({ channel: userId, text });
     }
   }
 
-  cron.schedule(
-    '0 0 * * *',
-    async () => {
-      lastCleanupDate = getCurrentDate(config.timezone);
-      morningEntries.clear();
-      eveningEntries.clear();
+  cron.schedule('0 0 * * *', async () => {
+    lastCleanupDate = getCurrentDate(config.timezone);
+    morningEntries.clear();
+    eveningEntries.clear();
 
-      for (const userId of Array.from(slackUserMap.keys())) {
-        await publishHome(userId);
-      }
-    },
-    { timezone: config.timezone },
-  );
+    for (const userId of Array.from(slackUserMap.keys())) {
+      await publishHome(userId);
+    }
+  }, { timezone: config.timezone });
 
-  cron.schedule(
-    '30 9 * * 1-5',
-    async () => {
-      if (dayChanged(lastCleanupDate, config.timezone)) {
-        lastCleanupDate = getCurrentDate(config.timezone);
-        morningEntries.clear();
-        eveningEntries.clear();
-      }
-      await notifyKnownUsers('朝礼');
-    },
-    { timezone: config.timezone },
-  );
+  cron.schedule('30 9 * * 1-5', async () => {
+    await notifyKnownUsers('朝礼');
+  }, { timezone: config.timezone });
 
-  cron.schedule(
-    '30 17 * * 1-5',
-    async () => {
-      if (dayChanged(lastCleanupDate, config.timezone)) {
-        lastCleanupDate = getCurrentDate(config.timezone);
-        morningEntries.clear();
-        eveningEntries.clear();
-      }
-      await notifyKnownUsers('終礼');
-    },
-    { timezone: config.timezone },
-  );
+  cron.schedule('30 17 * * 1-5', async () => {
+    await notifyKnownUsers('終礼');
+  }, { timezone: config.timezone });
 
   await app.start(config.port);
   console.log(`⚡️ Flatup Slack Home app is running on port ${config.port}`);
 }
 
-main().catch((error) => {
+void main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
