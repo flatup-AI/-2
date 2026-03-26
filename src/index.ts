@@ -1,9 +1,10 @@
-import { App, LogLevel } from '@slack/bolt';
+import bolt from '@slack/bolt';
 import type { Block, KnownBlock } from '@slack/types';
 import cron from 'node-cron';
 import pkg from 'pg';
 import process from 'node:process';
 
+const { App, LogLevel } = bolt;
 const { Pool } = pkg;
 
 const pool = new Pool({
