@@ -614,23 +614,31 @@ async function main() {
     }
   });
 
-  app.action('open_morning_modal', async ({ ack, body, client, logger }) => {
-    await ack();
-    try {
-      await client.views.open({ trigger_id: body.trigger_id, view: buildMorningModal() });
-    } catch (error) {
-      logger.error(error);
-    }
-  });
+app.action('open_morning_modal', async ({ ack, body, client, logger }) => {
+  await ack();
 
-  app.action('open_end_of_day_modal', async ({ ack, body, client, logger }) => {
-    await ack();
-    try {
-      await client.views.open({ trigger_id: body.trigger_id, view: buildEveningModal() });
-    } catch (error) {
-      logger.error(error);
-    }
-  });
+  try {
+    await client.views.open({
+      trigger_id: body.trigger_id,
+      view: buildMorningModal(),
+    });
+  } catch (error) {
+    logger.error(error);
+  }
+});
+
+app.action('open_end_of_day_modal', async ({ ack, body, client, logger }) => {
+  await ack();
+
+  try {
+    await client.views.open({
+      trigger_id: body.trigger_id,
+      view: buildEveningModal(),
+    });
+  } catch (error) {
+    logger.error(error);
+  }
+});
 
   app.view('morning_submit', async ({ ack, body, view, client, logger }) => {
     await ack();
