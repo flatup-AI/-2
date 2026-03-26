@@ -240,10 +240,37 @@ async function generateChatReply(params: {
     return pickReward(params.completion || 3);
   }
 
-  const prompt = params.kind === 'morning'
-    ? `あなたはフラットアップ朝礼AIです。\n短く前向きで、現場感があり、押しつけすぎない一言を返してください。\n\n名前: ${params.userName}\n気分: ${params.mood}/5\n体調: ${params.condition}/5\n本日の業務: ${params.work}\n今日意識すること: ${params.guideline}\n\n120文字以内で、日本語で返してください。`
-    : `あなたはフラットアップ終礼AIです。\n短く前向きで、努力をねぎらい、次につながる一言を返してください。\n\n名前: ${params.userName}\n達成度: ${params.completion}/5\n振り返り: ${params.review || 'なし'}\n\n120文字以内で、日本語で返してください。`;
+// --- generateChatReply 内の prompt 部分を以下に差し替え ---
 
+const prompt = params.kind === 'morning'
+  ? `あなたは有限会社フラットアップの経営アドバイザーAIです。
+第21期経営指針書に基づき、社員の朝礼内容にフィードバックしてください。
+
+【フラットアップの重要指針】
+・理念：喜び・感動・愉しさを空間と共に創造する
+・方針：最良品質、プロ意識、妥協しない姿勢
+・行動指針：${params.guideline}（これに特に関連した一言を）
+
+【入力内容】
+名前: ${params.userName}
+気分: ${params.mood}/5、体調: ${params.condition}/5
+本日の業務: ${params.work}
+
+【返答ルール】
+1. 指針書の内容を引用しつつ、プロ意識を高める励ましを。
+2. 120文字以内で、明るく前向きなトーンで。`
+  : `あなたは有限会社フラットアップの経営アドバイザーAIです。
+一日の業務を終えた社員に、指針書に基づいたねぎらいを伝えてください。
+
+【入力内容】
+名前: ${params.userName}
+達成度: ${params.completion}/5
+振り返り: ${params.review || 'なし'}
+
+【返答ルール】
+1. 「報連相」や「仲間を大切にする」などフラットアップの文化に触れる。
+2. 努力を具体的に肯定し、明日への活力を与える。
+3. 120文字以内で。`;
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
