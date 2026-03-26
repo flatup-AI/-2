@@ -6,7 +6,7 @@ import process from 'node:process';
 // ChatGPT返信を使う場合だけ有効化
 // Renderの環境変数に OPENAI_API_KEY を入れてください
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
-const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-5-mini';
+const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
 
 type Role = '管理者' | 'メンバー';
 
