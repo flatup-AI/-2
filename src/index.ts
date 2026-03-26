@@ -288,9 +288,11 @@ const prompt = params.kind === 'morning'
       }),
     });
 
-    if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.status}`);
-    }
+if (!response.ok) {
+  const errorText = await response.text();
+  console.error('OpenAI error detail:', errorText);
+  throw new Error(`OpenAI API error: ${response.status} / ${errorText}`);
+}
 
     const data = await response.json() as {
       choices?: Array<{ message?: { content?: string } }>;
