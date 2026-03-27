@@ -870,17 +870,19 @@ async function main() {
     }
   });
 
-  app.action('open_end_of_day_modal', async ({ ack, body, client, logger }) => {
-    await ack();
-    try {
-      await client.views.open({
+app.action('open_end_of_day_modal', async ({ ack, body, client, logger }) => {
+  try {
+    await Promise.all([
+      ack(),
+      client.views.open({
         trigger_id: body.trigger_id,
         view: buildEveningModal(),
-      });
-    } catch (error) {
-      logger.error(error);
-    }
-  });
+      }),
+    ]);
+  } catch (error) {
+    logger.error(error);
+  }
+});
 
   app.view('morning_submit', async ({ ack, body, view, client, logger }) => {
     await ack();
