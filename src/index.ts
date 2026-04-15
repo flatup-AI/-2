@@ -978,22 +978,30 @@ app.action('open_end_of_day_modal', async ({ ack, body, client, logger }) => {
     }
   });
 
-  async function notifyKnownUsers(kind: '朝礼' | '終礼') {
-    const users = Array.from(slackUserMap.keys());
-    if (users.length === 0) return;
+async function notifyPendingUsers(kind: '朝礼' | '終礼') {
+  const date = getCurrentDate(config.timezone);
 
-    for (const userId of users) {
-      const text =
+  for (const member of fixedMembers) {
+    try {
+      const alreadyDone =
         kind === '朝礼'
-          ? '9:30です。Homeタブから朝礼を入力してください。'
-          : '17:30です。Homeタブから終礼を入力してください。';
+          ? await getMorningEntry(member.slackUserId, date)
+          : await getEveningEntry(member.slackUserId, date);
+
+      if (alreadyDone) continue;
 
       await app.client.chat.postMessage({
-        channel: userId,
-        text,
+        channel: member.slackUserId,
+        text:
+          kind === '朝礼'
+            ? '9:30です。Homeタブから朝礼を入力してください。'
+            : '17:30です。Homeタブから終礼を入力してください。',
       });
+    } catch (error: any) {
+      console.error(`通知失敗: ${member.name} (${member.slackUserId})`, error?.data || error);
     }
   }
+}
 
   cron.schedule(
     '30 9 * * 1-5',
