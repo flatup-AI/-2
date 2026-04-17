@@ -978,46 +978,9 @@ app.action('open_end_of_day_modal', async ({ ack, body, client, logger }) => {
     }
   });
 
-async function notifyPendingUsers(kind: '朝礼' | '終礼') {
-  const date = getCurrentDate(config.timezone);
 
-  for (const member of fixedMembers) {
-    try {
-      const alreadyDone =
-        kind === '朝礼'
-          ? await getMorningEntry(member.slackUserId, date)
-          : await getEveningEntry(member.slackUserId, date);
 
-      if (alreadyDone) continue;
 
-      await app.client.chat.postMessage({
-        channel: member.slackUserId,
-        text:
-          kind === '朝礼'
-            ? '9:30です。Homeタブから朝礼を入力してください。'
-            : '17:30です。Homeタブから終礼を入力してください。',
-      });
-    } catch (error: any) {
-      console.error(`通知失敗: ${member.name} (${member.slackUserId})`, error?.data || error);
-    }
-  }
-}
-
-  cron.schedule(
-    '30 9 * * 1-5',
-    async () => {
-      await notifyKnownUsers('朝礼');
-    },
-    { timezone: config.timezone },
-  );
-
-  cron.schedule(
-    '30 17 * * 1-5',
-    async () => {
-      await notifyKnownUsers('終礼');
-    },
-    { timezone: config.timezone },
-  );
 
   await app.start(config.port);
   console.log(`⚡️ Flatup Slack Home app is running on port ${config.port}`);
